@@ -1,11 +1,11 @@
 CC=gcc
-CFLAGS=-ansi -pedantic -Wall
+CFLAGS=--std=c99 -pedantic -Wall
 SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 DEST=.
 EXE=colourcube
-INCLUDES=
-LIBS=
+INCLUDES=`pkg-config --cflags glib-2.0`
+LIBS=`pkg-config --libs glib-2.0`
 
 .c.o:
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
