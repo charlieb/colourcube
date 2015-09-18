@@ -56,7 +56,7 @@ int init_cube(struct cube *c) {
         .y = rand() / (RAND_MAX / 255),
         .z = rand() / (RAND_MAX / 255)
     };
-    printv3(colour);
+    printv3(colour); printf("\n");
     set(c, *pos, colour);
     g_queue_push_head(c->actives, pos);
   }
@@ -76,6 +76,7 @@ int fill_cube(struct cube *c) {
     v3 colour = {0,0,0};
     int ncolours = 0;
     int nexpands = 0;
+    int ncompleted = 0;
 
     v3 pos = *(v3*)g_queue_peek_tail(c->actives);
     for(int i = -1; i < 2; i++)
@@ -99,7 +100,13 @@ int fill_cube(struct cube *c) {
         }
     if(0 == nexpands) {
       put_v3(g_queue_pop_tail(c->actives)); // return the actives memory
-      printf("."); fflush(NULL);
+      ncompleted++;
+      if(ncompleted % c->size.x == 0) {
+        printf(".");
+        if(ncompleted % (c->size.x * c->size.y) == 0)
+          printf("\n%i / %i\n", ncompleted, c->size.x * c->size.y * c->size.z);
+        fflush(NULL);
+      }
     }
     else {
       // Choose which neighbour to expand into
