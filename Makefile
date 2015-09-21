@@ -16,7 +16,10 @@ exe: $(OBJECTS)
 debug: CFLAGS += -g
 debug: exe
 
-release: CFLAGS += -O2
+profile: CFLAGS += -g -pg -O3
+profile: exe
+
+release: CFLAGS += -O3
 release: exe
 
 clean:

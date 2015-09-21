@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include <glib.h>
 #include <png.h>
@@ -12,12 +13,68 @@ typedef struct {
   int z;
 } v3;
 
-struct cube {
-  v3 *data;
-  v3 size;
-  GQueue *actives;
-};
+bool v3eq(v3 v1, v3 v2) { return v1.x == v2.x && v1.y == v2.y && v1.z == v2.z; }
+bool in_cube(v3 size, v3 pos) { 
+  return size.x > pos.x && pos.x >= 0 &&
+         size.y > pos.y && pos.y >= 0 &&
+         size.z > pos.z && pos.z >= 0;
+}
 
+/* BOOLCUBE */
+typedef struct {
+  bool *data;
+  v3 size;
+} boolcube;
+
+static bool *bool_datap(boolcube *c, v3 pos) { return &c->data[pos.x + pos.y * c->size.x + pos.z * c->size.x * c->size.y]; }
+bool bool_get(boolcube *c, v3 pos) { return *bool_datap(c, pos); }
+void bool_set(boolcube *c, v3 pos, bool val) { *bool_datap(c, pos) = val; }
+
+int ncubed(int n) { return n*n*n; }
+bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
+{
+  int range = 0;
+
+  while(range < max_range) {
+    range++;
+    v3 expands[ncubed(2*range+1)]; // a 3x3x3 cube then 5x5x5 etc.
+    int nexpands = 0;
+
+    for(int i = -range; i <= range; i++)
+      for(int j = -range; j <= range; j++)
+        for(int k = -range; k <= range; k++) {
+          if(i == 0 && j == 0 && k == 0) continue;
+          v3 neighbour_pos = {pos.x+i, pos.y+j, pos.z+k};
+          if(!in_cube(c->size, neighbour_pos)) continue;
+
+          // if the position contains FALSE. it's available
+          if(!bool_get(c, neighbour_pos)) {
+            // add to potential expansions
+            expands[nexpands++] = neighbour_pos;
+          }
+        }
+    if(nexpands > 0) {
+      *neighbour = expands[rand() / (RAND_MAX / nexpands)];
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+void bool_reset(boolcube *c)
+{
+  memset(c->data, 0, c->size.x * c->size.y * c->size.z * sizeof(bool));
+}
+boolcube *bool_init_cube(v3 size)
+{
+  boolcube *bc = malloc(sizeof(boolcube));
+  bc->size = size;
+  bc->data = malloc(size.x * size.y * size.z * sizeof(bool));
+  bool_reset(bc);
+  return bc;
+}
+
+/* V3 POOL */
 static GTrashStack *pool = NULL;
 gpointer get_v3() {
   const int block_size = 500;
@@ -32,6 +89,12 @@ gpointer get_v3() {
 }
 void put_v3(gpointer data) { g_trash_stack_push(&pool, data); }
 
+/* v3 CUBE */
+struct cube {
+  v3 *data;
+  v3 size;
+};
+
 static v3 *datap(struct cube *c, v3 pos) { return &c->data[pos.x + pos.y * c->size.x + pos.z * c->size.x * c->size.y]; }
 v3 get(struct cube *c, v3 pos) { return *datap(c, pos); }
 void set(struct cube *c, v3 pos, v3 val) { *datap(c, pos) = val; }
@@ -42,10 +105,48 @@ int init_cube(struct cube *c) {
   size_t bytes = c->size.x * c->size.y * c->size.z * sizeof(v3);
   c->data = malloc(bytes);
   memset(c->data, 0, bytes);
+  return 0;
+}
 
-  c->actives = g_queue_new();
+v3 pick_neighbour(struct cube *c, v3 pos, v3 nil, int max_range)
+{
+  int range = 0;
 
-  for(int i = 0; i < 40; i++) {
+  while(range < max_range) {
+    range++;
+    v3 expands[2*range+1]; // a 3x3x3 cube then 5x5x5 etc.
+    int nexpands = 0;
+
+    for(int i = -range; i <= range; i++)
+      for(int j = -range; j <= range; j++)
+        for(int k = -range; k <= range; k++) {
+          if(i == 0 && j == 0 && k == 0) continue;
+          v3 neighbour_pos = {pos.x+i, pos.y+j, pos.z+k};
+          if(!in_cube(c->size, neighbour_pos)) continue;
+
+          v3 neighbour = get(c, neighbour_pos);
+          /*
+          printv3(neighbour_pos); fflush(NULL);
+          printv3(neighbour); fflush(NULL);
+          printf("---\n"); fflush(NULL);
+          */
+          if(v3eq(neighbour, nil)) {
+            // add to potential expansions
+            expands[nexpands++] = neighbour_pos;
+          }
+        }
+    if(nexpands > 0)
+      return expands[rand() / (RAND_MAX / nexpands)];
+  }
+  return nil;
+}
+
+GQueue *init_actives(struct cube *c, int nactives)
+{
+  GQueue *actives;
+  actives = g_queue_new();
+
+  for(int i = 0; i < 20; i++) {
     v3 *pos = get_v3();
     pos->x = rand() / (RAND_MAX / c->size.x);
     pos->y = rand() / (RAND_MAX / c->size.y);
@@ -56,50 +157,44 @@ int init_cube(struct cube *c) {
         .y = rand() / (RAND_MAX / 255),
         .z = rand() / (RAND_MAX / 255)
     };
-    printv3(colour); printf("\n");
     set(c, *pos, colour);
-    g_queue_push_head(c->actives, pos);
+    g_queue_push_head(actives, pos);
   }
-
-  return 0;
+  return actives;
 }
 
-bool v3eq(v3 v1, v3 v2) { return v1.x == v2.x && v1.y == v2.y && v1.z == v2.z; }
-bool in_range(struct cube *c, v3 pos) { 
-  return c->size.x > pos.x && pos.x >= 0 &&
-         c->size.y > pos.y && pos.y >= 0 &&
-         c->size.z > pos.z && pos.z >= 0;
-}
 int fill_cube(struct cube *c) {
-  v3 expands[9+9+9] = {{0,},}; // a 3x3x3 cube
-  while(g_queue_get_length(c->actives) > 0) {
-    v3 colour = {0,0,0};
-    int ncolours = 0;
-    int nexpands = 0;
-    int ncompleted = 0;
+  GQueue *actives = init_actives(c, 40);
+  int ncompleted = 0;
 
-    v3 pos = *(v3*)g_queue_peek_tail(c->actives);
-    for(int i = -1; i < 2; i++)
-      for(int j = -1; j < 2; j++)
-        for(int k = -1; k < 2; k++) {
-          //if(i == j == k == 0) continue;
-          v3 neighbour_pos = {pos.x+i, pos.y+j, pos.z+k};
-          if(!in_range(c, neighbour_pos)) continue;
+  boolcube *bc = bool_init_cube(c->size);
+  boolcube *cc = bool_init_cube((v3){255,255,255});
 
-          v3 neighbour = get(c, neighbour_pos);
-          if(v3eq(neighbour, (v3){0,0,0})) {
-            // add to potential expansions
-            expands[nexpands++] = neighbour_pos;
-          }
-          else { // add to averaging set
-            colour.x += neighbour.x;
-            colour.y += neighbour.y;
-            colour.z += neighbour.z;
-            ncolours++;
-          }
-        }
-    if(0 == nexpands) {
-      put_v3(g_queue_pop_tail(c->actives)); // return the actives memory
+  // As long as there are uncoloured voxels
+  while(g_queue_get_length(actives) > 0) {
+    v3 pos = *(v3*)g_queue_peek_tail(actives);
+    v3 *new_pos = get_v3();
+    // Pick one from the actives list and see if it has a neigbour
+    if(bool_find_neighbour(bc, pos, new_pos, 1)) {
+      // Find a colour that hasn't been used yet nearest to the 
+      // colour of the current voxel
+      v3 colour = get(c, pos);
+      v3 new_colour;
+      if(!bool_find_neighbour(cc, colour, &new_colour, 255)) {
+        // oh crap ran out of colour, start over
+        bool_reset(cc);
+        bool_find_neighbour(cc, colour, &new_colour, 255);
+      }
+      set(c, *new_pos, get(c, pos));
+      bool_set(bc, *new_pos, TRUE);
+      bool_set(cc, new_colour, TRUE);
+      g_queue_insert_before(actives,
+                            g_queue_peek_nth_link(actives, rand() / (RAND_MAX / g_queue_get_length(actives))),
+                            new_pos);
+    }
+    else { // no neighbour found
+      put_v3(g_queue_pop_tail(actives)); // return the actives memory
+      get_v3(new_pos); // and the new_pos we tried to fill
       ncompleted++;
       if(ncompleted % c->size.x == 0) {
         printf(".");
@@ -107,18 +202,6 @@ int fill_cube(struct cube *c) {
           printf("\n%i / %i\n", ncompleted, c->size.x * c->size.y * c->size.z);
         fflush(NULL);
       }
-    }
-    else {
-      // Choose which neighbour to expand into
-      v3 *chosen_pos = get_v3();
-      *chosen_pos = expands[rand() / (RAND_MAX / nexpands)];
-      colour.x = 5 - rand() / (RAND_MAX / 10) + colour.x / ncolours;
-      colour.y = 5 - rand() / (RAND_MAX / 10) + colour.y / ncolours;
-      colour.z = 5 - rand() / (RAND_MAX / 10) + colour.z / ncolours;
-      set(c, *chosen_pos, colour);
-      g_queue_insert_before(c->actives,
-                            g_queue_peek_nth_link(c->actives, rand() / (RAND_MAX / g_queue_get_length(c->actives))),
-                            chosen_pos);
     }
   }
   return 0;
@@ -169,7 +252,7 @@ int write_pngs(struct cube *c) {
     // Translate cube data to row_pointers
     for(int i = 0; i < c->size.x; i++)
       for(int j = 0; j < c->size.y; j++) {
-        v3 colour = get(c, (v3){i,j,0});
+        v3 colour = get(c, (v3){i,j,z});
         row_pointers[j][3*i+0] = colour.x; // R
         row_pointers[j][3*i+1] = colour.y; // G
         row_pointers[j][3*i+2] = colour.z; // B
@@ -187,9 +270,12 @@ int write_pngs(struct cube *c) {
   return 0;
 }
 
-int main() {
+int main(int argc, char **argv) {
   struct cube c;
-  c.size.x = c.size.y = c.size.z = 200;
+  if(3 != sscanf(argv[1], "%ix%ix%ix", &c.size.x, &c.size.y, &c.size.z)) {
+    c.size.x = c.size.y = 50;
+    c.size.z = 30;
+  }
   init_cube(&c);
   fill_cube(&c);
   write_pngs(&c);
