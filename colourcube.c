@@ -163,7 +163,8 @@ GQueue *init_actives(struct cube *c, int nactives)
   return actives;
 }
 
-int fill_cube(struct cube *c) {
+int fill_cube(struct cube *c) 
+{
   GQueue *actives = init_actives(c, 40);
   int ncompleted = 0;
 
@@ -185,7 +186,7 @@ int fill_cube(struct cube *c) {
         bool_reset(cc);
         bool_find_neighbour(cc, colour, &new_colour, 255);
       }
-      set(c, *new_pos, get(c, pos));
+      set(c, *new_pos, new_colour);
       bool_set(bc, *new_pos, TRUE);
       bool_set(cc, new_colour, TRUE);
       g_queue_insert_before(actives,
@@ -207,13 +208,14 @@ int fill_cube(struct cube *c) {
   return 0;
 }
 
-int write_pngs(struct cube *c) {
-  char filename[14] = "test00000.png";//\0
+int write_pngs(struct cube *c, char *filename_base) 
+{
+  char filename[strlen(filename_base) + 10]; // filename + "00000.png\0"
   FILE *fp = NULL;
   png_bytep *row_pointers = NULL;
 
   for(int z = 0; z < c->size.z; z++) { // each slice in z gets a frame
-    sprintf(filename, "test%.5d.png", z);
+    sprintf(filename, "%s%.5d.png",filename_base, z);
     printf("%s\n", filename);
     fp = fopen(filename, "wb");
     if(!fp) abort();
@@ -228,7 +230,7 @@ int write_pngs(struct cube *c) {
 
     png_init_io(png, fp);
 
-    // Output is 8bit depth, RGBA format.
+    // Output is 8bit depth, RGB format.
     png_set_IHDR(
         png,
         info,
@@ -251,33 +253,41 @@ int write_pngs(struct cube *c) {
 
     // Translate cube data to row_pointers
     for(int i = 0; i < c->size.x; i++)
-      for(int j = 0; j < c->size.y; j++) {
-        v3 colour = get(c, (v3){i,j,z});
-        row_pointers[j][3*i+0] = colour.x; // R
-        row_pointers[j][3*i+1] = colour.y; // G
-        row_pointers[j][3*i+2] = colour.z; // B
-      }
+       for(int j = 0; j < c->size.y; j++) {
+          v3 colour = get(c, (v3){i,j,z});
+          row_pointers[j][3*i+0] = colour.x; // R
+          row_pointers[j][3*i+1] = colour.y; // G
+          row_pointers[j][3*i+2] = colour.z; // B
+       }
     png_write_image(png, row_pointers);
     png_write_end(png, NULL);
-  }
 
-  for(int y = 0; y < c->size.y; y++) {
-    free(row_pointers[y]);
-  }
-  free(row_pointers);
 
-  fclose(fp);
+    for(int y = 0; y < c->size.y; y++) {
+       free(row_pointers[y]);
+    }
+    free(row_pointers);
+
+    fclose(fp);
+  }
   return 0;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
   struct cube c;
+  // colourcube dimensions in format XXxYYxZZ
   if(3 != sscanf(argv[1], "%ix%ix%ix", &c.size.x, &c.size.y, &c.size.z)) {
     c.size.x = c.size.y = 50;
     c.size.z = 30;
   }
+  char *filename_base;
+  if(argc >= 3) // filename
+     filename_base = argv[2];
+  else
+     filename_base = "default";
   init_cube(&c);
   fill_cube(&c);
-  write_pngs(&c);
+  write_pngs(&c, filename_base);
   return 0;
 }
