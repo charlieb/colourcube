@@ -190,11 +190,15 @@ int fill_cube(struct cube *c)
       set(c, *new_pos, new_colour);
       bool_set(bc, *new_pos, TRUE);
       bool_set(cc, new_colour, TRUE);
+      /*
       g_queue_insert_before(actives,
                             g_queue_peek_nth_link(actives, rand() / (RAND_MAX / g_queue_get_length(actives))),
                             new_pos);
-      //g_queue_push_tail(actives, new_pos); // very pixelated and noisy
-      //g_queue_push_head(actives, new_pos); // very blocky and regular
+                            */
+      if(rand() > RAND_MAX / 2)
+         g_queue_push_tail(actives, new_pos); // very pixelated and noisy
+      else
+         g_queue_push_head(actives, new_pos); // very blocky and regular
     }
     else { // no neighbour found
       put_v3(g_queue_pop_tail(actives)); // return the actives memory
