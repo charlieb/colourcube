@@ -101,7 +101,8 @@ void set(struct cube *c, v3 pos, v3 val) { *datap(c, pos) = val; }
 
 void printv3(v3 pos) { printf("(%i, %i, %i)\n", pos.x, pos.y, pos.z); fflush(NULL);}
 
-int init_cube(struct cube *c) {
+int init_cube(struct cube *c) 
+{
   size_t bytes = c->size.x * c->size.y * c->size.z * sizeof(v3);
   c->data = malloc(bytes);
   memset(c->data, 0, bytes);
@@ -146,7 +147,7 @@ GQueue *init_actives(struct cube *c, int nactives)
   GQueue *actives;
   actives = g_queue_new();
 
-  for(int i = 0; i < 20; i++) {
+  for(int i = 0; i < 40; i++) {
     v3 *pos = get_v3();
     pos->x = rand() / (RAND_MAX / c->size.x);
     pos->y = rand() / (RAND_MAX / c->size.y);
@@ -192,6 +193,8 @@ int fill_cube(struct cube *c)
       g_queue_insert_before(actives,
                             g_queue_peek_nth_link(actives, rand() / (RAND_MAX / g_queue_get_length(actives))),
                             new_pos);
+      //g_queue_push_tail(actives, new_pos); // very pixelated and noisy
+      //g_queue_push_head(actives, new_pos); // very blocky and regular
     }
     else { // no neighbour found
       put_v3(g_queue_pop_tail(actives)); // return the actives memory
@@ -261,15 +264,14 @@ int write_pngs(struct cube *c, char *filename_base)
        }
     png_write_image(png, row_pointers);
     png_write_end(png, NULL);
-
-
-    for(int y = 0; y < c->size.y; y++) {
-       free(row_pointers[y]);
-    }
-    free(row_pointers);
-
     fclose(fp);
+
   }
+  for(int y = 0; y < c->size.y; y++) {
+     free(row_pointers[y]);
+  }
+  free(row_pointers);
+
   return 0;
 }
 
