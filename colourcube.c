@@ -34,10 +34,16 @@ int ncubed(int n) { return n*n*n; }
 bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
 {
   int range = 0;
+  static v3 *expands = NULL;
+  static int expands_range = 0; // note: this is range not size
+  const int expands_range_inc = 10;
 
   while(range < max_range) {
     range++;
-    v3 expands[ncubed(2*range+1)]; // a 3x3x3 cube then 5x5x5 etc.
+    if(range > expands_range) {
+       expands_range += expands_range_inc;
+       expands = realloc(expands, ncubed(2*expands_range+1) * sizeof(v3)); // a 3x3x3 cube then 5x5x5 etc.
+    }
     int nexpands = 0;
 
     for(int i = -range; i <= range; i++)
@@ -207,7 +213,7 @@ int fill_cube(struct cube *c)
       if(ncompleted % c->size.x == 0) {
         printf(".");
         if(ncompleted % (c->size.x * c->size.y) == 0)
-          printf("\n%i / %i\n", ncompleted, c->size.x * c->size.y * c->size.z);
+          printf("\n%i / %i, %i actives\n", ncompleted, c->size.x * c->size.y * c->size.z, g_queue_get_length(actives));
         fflush(NULL);
       }
     }
