@@ -170,6 +170,73 @@ GQueue *init_actives(struct cube *c, int nactives)
   return actives;
 }
 
+int fill_cube_noq(struct cube *c) 
+{
+  int ncompleted = 0;
+  int nfilled = 0;
+  const int nvoxels = c->size.x * c->size.y * c->size.z;
+
+  // bool cube - did we fill in a colour
+  boolcube *bc = bool_init_cube(c->size);
+  // finished cube - is it filled and are all it's neighbours filled
+  boolcube *fc = bool_init_cube(c->size);
+  boolcube *cc = bool_init_cube((v3){255,255,255});
+
+  for(int i = 0; i < 40; i++) {
+    v3 pos = (v3){rand() / (RAND_MAX / c->size.x),
+                  rand() / (RAND_MAX / c->size.y),
+                  rand() / (RAND_MAX / c->size.z)};
+
+    v3 colour = {
+        .x = rand() / (RAND_MAX / 255),
+        .y = rand() / (RAND_MAX / 255),
+        .z = rand() / (RAND_MAX / 255)
+    };
+    set(c, pos, colour);
+    bool_set(bc, pos, TRUE);
+  }
+
+  // As long as there are uncoloured voxels
+  while(ncompleted < nvoxels) {
+     for(int i = 0; i < c->size.x; i++)
+        for(int j = 0; j < c->size.y; j++)
+           for(int k = 0; k < c->size.z; k++) {
+              v3 pos = (v3){i,j,k};
+              if(!bool_get(bc, pos)) continue; // pos does not yet have colour
+              if(bool_get(fc, pos)) continue; // pos known to have no unfilled neighbours
+              v3 new_pos;
+              // Pick one from the actives list and see if it has a neigbour
+              if(bool_find_neighbour(bc, pos, &new_pos, 1)) {
+                 // Find a colour that hasn't been used yet nearest to the 
+                 // colour of the current voxel
+                 v3 colour = get(c, pos);
+                 v3 new_colour;
+                 if(!bool_find_neighbour(cc, colour, &new_colour, 255)) {
+                    // oh crap ran out of colour, start over
+                    bool_reset(cc);
+                    bool_find_neighbour(cc, colour, &new_colour, 255);
+                 }
+                 set(c, new_pos, new_colour);
+                 bool_set(bc, new_pos, TRUE);
+                 bool_set(cc, new_colour, TRUE);
+                 nfilled++;
+                 //if(nfilled % 100 == 0) printf("Filled %i\n", nfilled);
+              }
+              else { // no neighbour found
+                 bool_set(fc, pos, TRUE);
+                 ncompleted++;
+                 if(ncompleted % c->size.x == 0) {
+                    printf(".");
+                    if(ncompleted % (c->size.x * c->size.y) == 0)
+                       printf("\n%i / %i, %i actives\n", ncompleted, c->size.x * c->size.y * c->size.z, nvoxels);
+                    fflush(NULL);
+                 }
+              }
+           }
+  }
+  return 0;
+}
+
 int fill_cube(struct cube *c) 
 {
   GQueue *actives = init_actives(c, 40);
@@ -299,7 +366,7 @@ int main(int argc, char **argv)
   else
      filename_base = "default";
   init_cube(&c);
-  fill_cube(&c);
+  fill_cube_noq(&c);
   write_pngs(&c, filename_base);
   return 0;
 }
