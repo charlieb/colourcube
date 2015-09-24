@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <math.h>
 
-#include <glib.h>
 #include <png.h>
 
 typedef struct {
@@ -51,7 +50,7 @@ void bool_find_neighbours(boolcube *c, v3 pos, int max_range, v3 **neighbours, i
           v3 neighbour_pos = {pos.x+i, pos.y+j, pos.z+k};
           if(!in_cube(c->size, neighbour_pos)) continue;
 
-          // if the position contains FALSE. it's available
+          // if the position contains false. it's available
           if(!bool_get(c, neighbour_pos)) {
             // add to potential expansions
             (*neighbours)[(*nneighbours)++] = neighbour_pos;
@@ -68,9 +67,9 @@ bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
   bool_find_neighbours(c, pos, max_range, &expands, &expands_range, &nexpands);
   if(nexpands > 0) {
     *neighbour = expands[rand() / (RAND_MAX / nexpands)];
-    return TRUE;
+    return true;
   }
-  return FALSE;
+  return false;
 }
 
 void bool_reset(boolcube *c)
@@ -85,21 +84,6 @@ boolcube *bool_init_cube(v3 size)
   bool_reset(bc);
   return bc;
 }
-
-/* V3 POOL */
-static GTrashStack *pool = NULL;
-gpointer get_v3() {
-  const int block_size = 500;
-
-  // allocate more trash if necessary
-  if(!g_trash_stack_peek(&pool)) {
-    v3 *block = malloc(block_size * sizeof(v3));
-    for(int i = 0; i < block_size; i++)
-      g_trash_stack_push(&pool, block + i);
-  }
-  return g_trash_stack_pop(&pool);
-}
-void put_v3(gpointer data) { g_trash_stack_push(&pool, data); }
 
 /* v3 CUBE */
 struct cube {
@@ -154,28 +138,6 @@ v3 pick_neighbour(struct cube *c, v3 pos, v3 nil, int max_range)
   return nil;
 }
 
-GQueue *init_actives(struct cube *c, int nactives)
-{
-  GQueue *actives;
-  actives = g_queue_new();
-
-  for(int i = 0; i < 40; i++) {
-    v3 *pos = get_v3();
-    pos->x = rand() / (RAND_MAX / c->size.x);
-    pos->y = rand() / (RAND_MAX / c->size.y);
-    pos->z = rand() / (RAND_MAX / c->size.z);
-
-    v3 colour = {
-        .x = rand() / (RAND_MAX / 255),
-        .y = rand() / (RAND_MAX / 255),
-        .z = rand() / (RAND_MAX / 255)
-    };
-    set(c, *pos, colour);
-    g_queue_push_head(actives, pos);
-  }
-  return actives;
-}
-
 void shuffle(int *array, int size)
 {
   // https://en.wikipedia.org/wiki/Fisher-Yates_shuffle
@@ -187,7 +149,7 @@ void shuffle(int *array, int size)
       array[j] = tmp;
     }
 }
-int fill_cube_noq(struct cube *c) 
+int fill_cube(struct cube *c) 
 {
   int ncompleted = 0;
   int nfilled = 0;
@@ -210,7 +172,7 @@ int fill_cube_noq(struct cube *c)
         .z = rand() / (RAND_MAX / 255)
     };
     set(c, pos, colour);
-    bool_set(bc, pos, TRUE);
+    bool_set(bc, pos, true);
   }
 
   int *order_x = malloc(c->size.x * sizeof(int));
@@ -249,13 +211,13 @@ int fill_cube_noq(struct cube *c)
                     bool_find_neighbour(cc, colour, &new_colour, 255);
                  }
                  set(c, new_pos, new_colour);
-                 bool_set(bc, new_pos, TRUE);
-                 bool_set(cc, new_colour, TRUE);
+                 bool_set(bc, new_pos, true);
+                 bool_set(cc, new_colour, true);
                  nfilled++;
                  //if(nfilled % 100 == 0) printf("Filled %i\n", nfilled);
               }
               else { // no neighbour found
-                 bool_set(fc, pos, TRUE);
+                 bool_set(fc, pos, true);
                  ncompleted++;
                  if(ncompleted % c->size.x == 0) {
                     printf(".");
@@ -265,57 +227,6 @@ int fill_cube_noq(struct cube *c)
                  }
               }
            }
-  }
-  return 0;
-}
-
-int fill_cube(struct cube *c) 
-{
-  GQueue *actives = init_actives(c, 40);
-  int ncompleted = 0;
-
-  boolcube *bc = bool_init_cube(c->size);
-  boolcube *cc = bool_init_cube((v3){255,255,255});
-
-  // As long as there are uncoloured voxels
-  while(g_queue_get_length(actives) > 0) {
-    v3 pos = *(v3*)g_queue_peek_tail(actives);
-    v3 *new_pos = get_v3();
-    // Pick one from the actives list and see if it has a neigbour
-    if(bool_find_neighbour(bc, pos, new_pos, 1)) {
-      // Find a colour that hasn't been used yet nearest to the 
-      // colour of the current voxel
-      v3 colour = get(c, pos);
-      v3 new_colour;
-      if(!bool_find_neighbour(cc, colour, &new_colour, 255)) {
-        // oh crap ran out of colour, start over
-        bool_reset(cc);
-        bool_find_neighbour(cc, colour, &new_colour, 255);
-      }
-      set(c, *new_pos, new_colour);
-      bool_set(bc, *new_pos, TRUE);
-      bool_set(cc, new_colour, TRUE);
-      /*
-      g_queue_insert_before(actives,
-                            g_queue_peek_nth_link(actives, rand() / (RAND_MAX / g_queue_get_length(actives))),
-                            new_pos);
-                            */
-      if(rand() > RAND_MAX / 2)
-         g_queue_push_tail(actives, new_pos); // very pixelated and noisy
-      else
-         g_queue_push_head(actives, new_pos); // very blocky and regular
-    }
-    else { // no neighbour found
-      put_v3(g_queue_pop_tail(actives)); // return the actives memory
-      get_v3(new_pos); // and the new_pos we tried to fill
-      ncompleted++;
-      if(ncompleted % c->size.x == 0) {
-        printf(".");
-        if(ncompleted % (c->size.x * c->size.y) == 0)
-          printf("\n%i / %i, %i actives\n", ncompleted, c->size.x * c->size.y * c->size.z, g_queue_get_length(actives));
-        fflush(NULL);
-      }
-    }
   }
   return 0;
 }
@@ -398,7 +309,7 @@ int main(int argc, char **argv)
   else
      filename_base = "default";
   init_cube(&c);
-  fill_cube_noq(&c);
+  fill_cube(&c);
   write_pngs(&c, filename_base);
   return 0;
 }

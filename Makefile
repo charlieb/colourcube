@@ -4,8 +4,8 @@ SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 DEST=.
 EXE=colourcube
-INCLUDES=`pkg-config --cflags libpng glib-2.0`
-LIBS=`pkg-config --libs libpng glib-2.0`
+INCLUDES=`pkg-config --cflags libpng`
+LIBS=`pkg-config --libs libpng`
 
 .c.o:
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
