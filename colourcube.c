@@ -184,6 +184,7 @@ int fill_cube(struct cube *c)
   boolcube *bc = bool_init_cube(c->size);
   // finished cube - is it filled and are all it's neighbours filled
   boolcube *fc = bool_init_cube(c->size);
+  // colour cube - did we use a colour already?
   boolcube *cc = bool_init_cube((v3){255,255,255});
 
   // Place some pixels to seed the process
