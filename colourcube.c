@@ -149,6 +149,31 @@ void shuffle(int *array, int size)
       array[j] = tmp;
     }
 }
+
+bool colour_neighbour(struct cube *c, boolcube *bc, boolcube *cc, v3 pos)
+{
+   v3 new_pos;
+   // does the current voxel have an available neighbour
+   if(bool_find_neighbour(bc, pos, &new_pos, 1)) {
+      // Find a colour that hasn't been used yet nearest to the 
+      // colour of the current voxel
+      v3 colour = get(c, pos);
+      v3 new_colour;
+      if(!bool_find_neighbour(cc, colour, &new_colour, 255)) {
+         // oh crap ran out of colour, start over
+         bool_reset(cc);
+         bool_find_neighbour(cc, colour, &new_colour, 255);
+      }
+      set(c, new_pos, new_colour);
+      bool_set(bc, new_pos, true);
+      bool_set(cc, new_colour, true);
+      //if(nfilled % 100 == 0) printf("Filled %i\n", nfilled);
+      return true;
+   }
+   return false;
+}
+
+
 int fill_cube(struct cube *c) 
 {
   int ncompleted = 0;
@@ -161,6 +186,7 @@ int fill_cube(struct cube *c)
   boolcube *fc = bool_init_cube(c->size);
   boolcube *cc = bool_init_cube((v3){255,255,255});
 
+  // Place some pixels to seed the process
   for(int i = 0; i < 40; i++) {
     v3 pos = (v3){rand() / (RAND_MAX / c->size.x),
                   rand() / (RAND_MAX / c->size.y),
@@ -175,6 +201,11 @@ int fill_cube(struct cube *c)
     bool_set(bc, pos, true);
   }
 
+  // Here we create random order arrays for the three
+  // axes so that we can iterate over every voxel in
+  // a random order. This means that any directionality
+  // in the animation due to the left-to-right, top-to-bottom
+  // order of processing is eliminated (on average)
   int *order_x = malloc(c->size.x * sizeof(int));
   for(int i = 0; i < c->size.x; i++) order_x[i] = i;
   shuffle(order_x, c->size.x);
@@ -187,7 +218,6 @@ int fill_cube(struct cube *c)
   for(int i = 0; i < c->size.z; i++) order_z[i] = i;
   shuffle(order_z, c->size.z);
 
-  for(int i = 0; i < c->size.z; i++) printf("%i, ", order_z[i]);
 
   // As long as there are uncoloured voxels
   while(ncompleted < nvoxels) {
@@ -198,24 +228,8 @@ int fill_cube(struct cube *c)
               v3 pos = (v3){order_x[i], order_y[j], order_z[k]};
               if(!bool_get(bc, pos)) continue; // pos does not yet have colour
               if(bool_get(fc, pos)) continue; // pos known to have no unfilled neighbours
-              v3 new_pos;
-              // Pick one from the actives list and see if it has a neigbour
-              if(bool_find_neighbour(bc, pos, &new_pos, 1)) {
-                 // Find a colour that hasn't been used yet nearest to the 
-                 // colour of the current voxel
-                 v3 colour = get(c, pos);
-                 v3 new_colour;
-                 if(!bool_find_neighbour(cc, colour, &new_colour, 255)) {
-                    // oh crap ran out of colour, start over
-                    bool_reset(cc);
-                    bool_find_neighbour(cc, colour, &new_colour, 255);
-                 }
-                 set(c, new_pos, new_colour);
-                 bool_set(bc, new_pos, true);
-                 bool_set(cc, new_colour, true);
+              if(colour_neighbour(c, bc, cc, pos))
                  nfilled++;
-                 //if(nfilled % 100 == 0) printf("Filled %i\n", nfilled);
-              }
               else { // no neighbour found
                  bool_set(fc, pos, true);
                  ncompleted++;
