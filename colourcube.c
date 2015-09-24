@@ -31,20 +31,18 @@ bool bool_get(boolcube *c, v3 pos) { return *bool_datap(c, pos); }
 void bool_set(boolcube *c, v3 pos, bool val) { *bool_datap(c, pos) = val; }
 
 int ncubed(int n) { return n*n*n; }
-bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
+void bool_find_neighbours(boolcube *c, v3 pos, int max_range, v3 **neighbours, int *neighbour_max_range, int *nneighbours)
 {
   int range = 0;
-  static v3 *expands = NULL;
-  static int expands_range = 0; // note: this is range not size
   const int expands_range_inc = 10;
+  *nneighbours = 0;
 
-  while(range < max_range) {
+  while(*nneighbours <= 0 && range < max_range) {
     range++;
-    if(range > expands_range) {
-       expands_range += expands_range_inc;
-       expands = realloc(expands, ncubed(2*expands_range+1) * sizeof(v3)); // a 3x3x3 cube then 5x5x5 etc.
+    if(range > *neighbour_max_range) {
+       *neighbour_max_range += expands_range_inc;
+       *neighbours = realloc(*neighbours, ncubed(2*(*neighbour_max_range)+1) * sizeof(v3)); // a 3x3x3 cube then 5x5x5 etc.
     }
-    int nexpands = 0;
 
     for(int i = -range; i <= range; i++)
       for(int j = -range; j <= range; j++)
@@ -56,13 +54,21 @@ bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
           // if the position contains FALSE. it's available
           if(!bool_get(c, neighbour_pos)) {
             // add to potential expansions
-            expands[nexpands++] = neighbour_pos;
+            (*neighbours)[(*nneighbours)++] = neighbour_pos;
           }
         }
-    if(nexpands > 0) {
-      *neighbour = expands[rand() / (RAND_MAX / nexpands)];
-      return TRUE;
-    }
+  }
+}
+
+bool bool_find_neighbour(boolcube *c, v3 pos, v3 *neighbour, int max_range)
+{
+  int nexpands = 0;
+  static v3 *expands = NULL;
+  static int expands_range = 0; // note: this is range not size
+  bool_find_neighbours(c, pos, max_range, &expands, &expands_range, &nexpands);
+  if(nexpands > 0) {
+    *neighbour = expands[rand() / (RAND_MAX / nexpands)];
+    return TRUE;
   }
   return FALSE;
 }
@@ -170,6 +176,17 @@ GQueue *init_actives(struct cube *c, int nactives)
   return actives;
 }
 
+void shuffle(int *array, int size)
+{
+  // https://en.wikipedia.org/wiki/Fisher-Yates_shuffle
+  for(int i = 0; i < size - 1; i++) {
+      int j = i + rand() / (RAND_MAX / (size - i));
+      printf("swap %i, %i\n", i,j); fflush(NULL);
+      int tmp = array[i];
+      array[i] = array[j];
+      array[j] = tmp;
+    }
+}
 int fill_cube_noq(struct cube *c) 
 {
   int ncompleted = 0;
@@ -196,12 +213,27 @@ int fill_cube_noq(struct cube *c)
     bool_set(bc, pos, TRUE);
   }
 
+  int *order_x = malloc(c->size.x * sizeof(int));
+  for(int i = 0; i < c->size.x; i++) order_x[i] = i;
+  shuffle(order_x, c->size.x);
+
+  int *order_y = malloc(c->size.y * sizeof(int));
+  for(int i = 0; i < c->size.y; i++) order_y[i] = i;
+  shuffle(order_y, c->size.y);
+
+  int *order_z = malloc(c->size.z * sizeof(int));
+  for(int i = 0; i < c->size.z; i++) order_z[i] = i;
+  shuffle(order_z, c->size.z);
+
+  for(int i = 0; i < c->size.z; i++) printf("%i, ", order_z[i]);
+
   // As long as there are uncoloured voxels
   while(ncompleted < nvoxels) {
      for(int i = 0; i < c->size.x; i++)
         for(int j = 0; j < c->size.y; j++)
            for(int k = 0; k < c->size.z; k++) {
-              v3 pos = (v3){i,j,k};
+              //v3 pos = (v3){i,j,k};
+              v3 pos = (v3){order_x[i], order_y[j], order_z[k]};
               if(!bool_get(bc, pos)) continue; // pos does not yet have colour
               if(bool_get(fc, pos)) continue; // pos known to have no unfilled neighbours
               v3 new_pos;

@@ -19,6 +19,9 @@ debug: exe
 profile: CFLAGS += -g -pg -O3
 profile: exe
 
+coverage: CFLAGS += -fprofile-arcs -ftest-coverage
+coverage: exe
+
 release: CFLAGS += -O3
 release: exe
 
